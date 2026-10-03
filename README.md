@@ -34,6 +34,7 @@ Passwords are RSA-encrypted before they leave your machine and are never printed
 
 ```bash
 fitprofile check                      # verify login
+fitprofile check --deep               # also read and validate one measurement page
 fitprofile summary --days 30 --imperial
 fitprofile csv weights.csv            # every raw column, UTC + local timestamps
 fitprofile json --imperial            # all measurements as JSON
@@ -72,3 +73,19 @@ The tests are offline and use only synthetic fixtures.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## What this code does and does not do
+
+You should be able to verify these by reading `src/fitprofile/client.py` (about 250 lines):
+
+- Only the Fit Profile host is contacted. There is no telemetry, update check or other network access.
+- Only six read endpoints can be requested (`ALLOWED_READS`). The service has destructive operations that are plain GETs, so the client refuses any other path rather than trusting the HTTP method.
+- It never calls endpoints that return third-party integration tokens, manage reports, or change the account.
+- Your password is RSA-encrypted with the service's public key before sending; the only secret stored locally is the bearer token, in a `0600` file.
+- Responses with an unexpected shape fail loudly instead of producing a partial export.
+
+Protocol notes are in [docs/protocol.md](docs/protocol.md) and field meanings in [docs/fields.md](docs/fields.md).
+
+## Troubleshooting
+
+`fitprofile check --deep` is the quickest way to tell whether the service changed. A `string payload` error means the service started requiring the app's encryption wrapper; a `schema changed` error means the response shape moved. Open an issue with the message (never paste credentials or exported data).

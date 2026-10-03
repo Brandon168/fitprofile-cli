@@ -11,10 +11,11 @@ import urllib.parse
 from pathlib import Path
 from unittest import mock
 
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-from fitprofile import cli, client as fp, report, store
+from fitprofile import cli, report, store
+from fitprofile import client as fp
 
 EMAIL, PASSWORD = "user@example.invalid", "p@ss$word"
 
@@ -189,6 +190,24 @@ class History(unittest.TestCase):
         c, t = make({path: [page([row(1, 1_700_000_100)], finish=1)]})
         c.snapshot({"histories": {"7": {**old, "complete": False}}})
         self.assertEqual(t.measurement_queries()[0]["last_updated_at"], "0")  # partial store is never trusted
+
+
+class Probe(unittest.TestCase):
+    def test_probe_reports_shape(self):
+        c, _ = make({"/measurements/list_measurement": [page([row(1, 1_700_000_100)], finish=1)]})
+        c.login()
+        self.assertEqual(c.probe(), {"profiles": 1, "first_page_records": 1, "finish_flag": 1})
+
+    def test_record_missing_fields_is_api_error_not_keyerror(self):
+        c, _ = make({"/measurements/list_measurement": [ok({"measurements": [{"measurement_id": "1"}],
+                     "last_updated_at": "1", "last_measurement_id": "1", "finish_flag": 1})]})
+        with self.assertRaisesRegex(fp.ApiError, "schema changed"):
+            c.history("7")
+
+    def test_page_missing_cursor_is_api_error(self):
+        c, _ = make({"/measurements/list_measurement": [ok({"measurements": []})]})
+        with self.assertRaisesRegex(fp.ApiError, "schema changed"):
+            c.history("7")
 
 
 class AccountScope(unittest.TestCase):

@@ -40,7 +40,7 @@ def save_store(blob: dict[str, Any], path: Path) -> Path:
             except OSError:
                 continue
             if time.time() > deadline:
-                raise ApiError(f"Store lock held by another process: {lock}")
+                raise ApiError(f"Store lock held by another process: {lock}") from None
             time.sleep(0.2)
     try:
         return write_private(path, json.dumps(blob, indent=2, ensure_ascii=False))

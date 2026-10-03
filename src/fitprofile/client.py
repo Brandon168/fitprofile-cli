@@ -9,8 +9,9 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from . import __version__
 from .paths import write_private
@@ -179,8 +180,9 @@ class Client:
                             last_updated_at=cursor[0], last_measurement_id=cursor[1])
             if not isinstance(data, dict) or not isinstance(data.get("measurements"), list):
                 raise ApiError("Unexpected measurement page schema")
+            check_page(data)
             rows.update({str(r["measurement_id"]): r for r in data["measurements"]})
-            deleted.update(str(x) for x in data.get("delete_measurement_ids", []))
+            deleted.update(str(x) for x in data.get("delete_measurement_ids") or [])
             cursor = (str(data["last_updated_at"]), str(data["last_measurement_id"]))
             flag = str(data.get("finish_flag"))
             if flag == "1":
@@ -188,6 +190,15 @@ class Client:
             if flag != "0":
                 raise ApiError("Unknown finish_flag; refusing a partial export")
         raise ApiError("Measurement page limit reached; refusing a partial export")
+
+    def probe(self) -> dict:
+        """Read-only health check: login, profiles, and one real measurement page validated for shape."""
+        profiles = self.profiles()
+        page = self.get("/measurements/list_measurement", user_id=str(self.user["user_id"]),
+                        last_updated_at="0", last_measurement_id="0")
+        check_page(page)
+        return {"profiles": len(profiles), "first_page_records": len(page["measurements"]),
+                "finish_flag": page.get("finish_flag")}
 
     def snapshot(self, prior: dict | None = None) -> dict:
         """Profiles, full histories, devices, goals and settings. Resumes complete histories from `prior`."""
@@ -208,14 +219,30 @@ class Client:
         for uid, old in ((prior or {}).get("histories") or {}).items():
             if uid not in histories and old.get("complete"):
                 histories[uid] = old  # profile no longer listed: keep what we have
-        return {"schema_version": 1, "complete": True, "app_id": APP_ID, "account_user_id": account, "profiles_resumed": resumed,
-                "retrieved_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        return {"schema_version": 1, "complete": True, "app_id": APP_ID, "account_user_id": account,
+                "profiles_resumed": resumed, "retrieved_at": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "profiles": profiles, "histories": histories,
                 "measurement_count": sum(h["count"] for h in histories.values()),
                 "devices": self.get("/device_binds/list_device_bind"),
                 "goals": {str(p["user_id"]): self.get("/goals/list_goal", user_id=str(p["user_id"]))
                           for p in profiles},
                 "settings": self.get("/user_settings/show_common_setting")}
+
+
+REQUIRED_PAGE_KEYS = ("last_updated_at", "last_measurement_id", "finish_flag")
+REQUIRED_RECORD_KEYS = ("measurement_id", "time_stamp", "weight")
+
+
+def check_page(data: Any) -> None:
+    """Raise ApiError, not KeyError, when a measurement page or record has an unexpected shape."""
+    if not isinstance(data, dict) or not isinstance(data.get("measurements"), list):
+        raise ApiError("Unexpected measurement page schema")
+    missing = [k for k in REQUIRED_PAGE_KEYS if k not in data]
+    if missing:
+        raise ApiError(f"Measurement page lacks {', '.join(missing)}; schema changed")
+    for r in data["measurements"]:
+        if not isinstance(r, dict) or any(k not in r for k in REQUIRED_RECORD_KEYS):
+            raise ApiError("Measurement record lacks measurement_id/time_stamp/weight; schema changed")
 
 
 def _history(rows, deleted: set[str], cursor: tuple, *, pages: int | None = None) -> dict:

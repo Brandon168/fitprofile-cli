@@ -51,7 +51,10 @@ def emit(data: dict[str, Any]) -> int:
 def cmd_check(args: argparse.Namespace) -> int:
     client = make_client(args)
     user = client.login(renew=args.renew_token)
-    return emit({"status": "auth_ok", "user_id": user.get("user_id")})
+    out = {"status": "auth_ok", "user_id": user.get("user_id")}
+    if args.deep:  # a real measurement read: catches protocol/schema breakage before a sync does
+        out.update(status="ok", **client.probe())
+    return emit(out)
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
@@ -94,8 +97,11 @@ def read_rows(args: argparse.Namespace) -> tuple[list[dict], dict[str, Any]]:
             blob = store.load_store(path)
             if blob is None:
                 raise
+            if blob.get("account_user_id") not in (None, uid):
+                raise  # the store belongs to another account; never serve it as this one's
             meta.update(origin="stale_store", sync_note=f"sync failed: {exc}")
-    meta.update(last_synced_at=blob.get("last_synced_at"), store_age_days=store.age_days(blob))
+    meta.update(account_user_id=blob.get("account_user_id"), last_synced_at=blob.get("last_synced_at"),
+                store_age_days=store.age_days(blob))
     if uid is None:  # offline: use the primary profile recorded in the store
         uid = next((str(p["user_id"]) for p in blob.get("profiles", []) if p.get("primary")), None)
     tz = report.zone(args.tz)
@@ -138,7 +144,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.set_defaults(func=func)
         return p
 
-    add("check", cmd_check, "verify login").add_argument("--renew-token", action="store_true")
+    chk = add("check", cmd_check, "verify login")
+    chk.add_argument("--renew-token", action="store_true")
+    chk.add_argument("--deep", action="store_true", help="also read and validate one measurement page")
     add("sync", cmd_sync, "pull new records into the local store").add_argument(
         "--full", action="store_true", help="discard the cursor and re-pull everything")
     add("export", cmd_export, "sync, then write the full snapshot as JSON").add_argument("path")
