@@ -59,6 +59,7 @@ LOGIN = ok({"token_info": {"token": "tok-1", "remaining_time": 86400 * 180},
             "user_info": {"user_id": "7", "nickname": "tester"}})
 BASE_ROUTES = {
     "/users/sign_in": [LOGIN],
+    "/users/get_primary_user": [ok({"user_info": {"user_id": "7", "nickname": "tester"}})],
     "/sub_users/list_sub_user": [ok({"sub_users": []})],
     "/device_binds/list_device_bind": [ok({"device_binds": []})],
     "/goals/list_goal": [ok({"goals": []})],
@@ -95,7 +96,7 @@ class RequestShape(unittest.TestCase):
 
     def test_encrypted_payload_is_rejected_clearly(self):
         c, _ = make({"/users/sign_in": [ok("c29tZS1jaXBoZXJ0ZXh0")]})
-        with self.assertRaisesRegex(fp.ApiError, "protocol has changed"):
+        with self.assertRaisesRegex(fp.ApiError, "string payload"):
             c.login()
 
     def test_application_error_is_not_success(self):
@@ -188,6 +189,14 @@ class History(unittest.TestCase):
         c, t = make({path: [page([row(1, 1_700_000_100)], finish=1)]})
         c.snapshot({"histories": {"7": {**old, "complete": False}}})
         self.assertEqual(t.measurement_queries()[0]["last_updated_at"], "0")  # partial store is never trusted
+
+
+class Allowlist(unittest.TestCase):
+    def test_non_allowlisted_get_is_refused(self):
+        c, t = make()
+        c.login()
+        with self.assertRaisesRegex(fp.ApiError, "not an allowed read"):
+            c.get("/health_reports/delete_health_report")
 
 
 class Store(unittest.TestCase):

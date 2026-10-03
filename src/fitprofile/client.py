@@ -19,7 +19,13 @@ from .report import sort_key
 API_BASE = "https://fit-profile.qnclouds.com/api/v4"
 APP_ID = "fit_profile"
 USER_AGENT = f"fitprofile-cli/{__version__} (unofficial; read-only)"
-SUCCESS = {"200", "0"}
+SUCCESS = {"200"}
+# The service has destructive operations that are plain GETs (for example deleting a health
+# report), so a method restriction is not enough. Only these reads can be requested.
+ALLOWED_READS = frozenset({
+    "/users/get_primary_user", "/sub_users/list_sub_user", "/measurements/list_measurement",
+    "/device_binds/list_device_bind", "/goals/list_goal", "/user_settings/show_common_setting",
+})
 # Public RSA key the service uses to receive passwords at login. It is a public key
 # (not a secret) and is the same one other community clients for this service use.
 PUBLIC_KEY_PEM = b"""-----BEGIN PUBLIC KEY-----
@@ -97,11 +103,12 @@ class Client:
             # Never echo raw bodies: they can contain tokens or personal data.
             raise ApiError(f"Invalid JSON response on {path}") from exc
         if code == "403":
-            raise TokenExpired("Token expired (403)")
+            # The app's own text for 403 is a JWT failure: expired, revoked, or a skewed clock.
+            raise TokenExpired("Authentication failed (403): token expired or revoked, or system clock is wrong")
         if code not in SUCCESS:
             raise ApiError(f"{path} failed: code={code} msg={result.get('msg', '')}")
         if isinstance(result.get("data"), str):
-            raise ApiError(f"{path} returned an encrypted payload; the protocol has changed")
+            raise ApiError(f"{path} returned a string payload (possibly encrypted, or the schema changed)")
         return result.get("data")
 
     # -- auth --------------------------------------------------------------
@@ -133,6 +140,8 @@ class Client:
         return user
 
     def get(self, path: str, **params: str) -> Any:
+        if path not in ALLOWED_READS:
+            raise ApiError(f"{path} is not an allowed read endpoint")
         if not self.token:
             self.login()
         try:
@@ -147,7 +156,11 @@ class Client:
         subs = subs.get("sub_users") if isinstance(subs, dict) else subs
         if not isinstance(subs, list):
             raise ApiError("Unexpected sub-user list schema")
-        found = {str(self.user["user_id"]): {**self.user, "primary": True}}
+        # The login payload can be months old (cached token); refresh the primary profile.
+        fresh = self.get("/users/get_primary_user")
+        fresh = fresh.get("user_info") if isinstance(fresh, dict) else None
+        primary = {**self.user, **(fresh if isinstance(fresh, dict) else {})}
+        found = {str(self.user["user_id"]): {**primary, "primary": True}}
         for sub in subs:
             found.setdefault(str(sub["user_id"]), {**sub, "primary": False})
         return list(found.values())
@@ -179,6 +192,9 @@ class Client:
     def snapshot(self, prior: dict | None = None) -> dict:
         """Profiles, full histories, devices, goals and settings. Resumes complete histories from `prior`."""
         profiles = self.profiles()
+        account = str(self.user["user_id"])
+        if prior and prior.get("account_user_id") not in (None, account):
+            prior = None  # cursors belong to one account; never resume another's
         histories, resumed = {}, 0
         for p in profiles:
             uid = str(p["user_id"])
@@ -192,7 +208,7 @@ class Client:
         for uid, old in ((prior or {}).get("histories") or {}).items():
             if uid not in histories and old.get("complete"):
                 histories[uid] = old  # profile no longer listed: keep what we have
-        return {"schema_version": 1, "complete": True, "app_id": APP_ID, "profiles_resumed": resumed,
+        return {"schema_version": 1, "complete": True, "app_id": APP_ID, "account_user_id": account, "profiles_resumed": resumed,
                 "retrieved_at": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "profiles": profiles, "histories": histories,
                 "measurement_count": sum(h["count"] for h in histories.values()),
