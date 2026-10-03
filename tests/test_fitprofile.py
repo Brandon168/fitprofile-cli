@@ -191,6 +191,17 @@ class History(unittest.TestCase):
         self.assertEqual(t.measurement_queries()[0]["last_updated_at"], "0")  # partial store is never trusted
 
 
+class AccountScope(unittest.TestCase):
+    def test_other_accounts_cursor_is_not_resumed_and_account_is_recorded(self):
+        path = "/measurements/list_measurement"
+        old = {"measurements": [row(1, 1_700_000_100)], "count": 1, "complete": True,
+               "last_updated_at": "5", "last_measurement_id": "1", "delete_measurement_ids": []}
+        c, t = make({path: [page([row(1, 1_700_000_100)], finish=1)]})
+        snap = c.snapshot({"account_user_id": "999", "histories": {"7": old}})
+        self.assertEqual(t.measurement_queries()[0]["last_updated_at"], "0")
+        self.assertEqual(snap["account_user_id"], "7")
+
+
 class Allowlist(unittest.TestCase):
     def test_non_allowlisted_get_is_refused(self):
         c, t = make()

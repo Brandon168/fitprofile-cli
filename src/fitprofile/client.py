@@ -113,7 +113,7 @@ class Client:
 
     # -- auth --------------------------------------------------------------
     def login(self, *, renew: bool = False) -> dict[str, Any]:
-        """Log in, reusing the cached bearer token (180-day lifetime) while it is valid."""
+        """Log in, reusing the cached bearer token (lifetime set by the server's `remaining_time`) while it is valid."""
         if not renew and self.token_cache:
             try:
                 blob = json.loads(self.token_cache.read_text())
