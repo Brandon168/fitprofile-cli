@@ -39,6 +39,7 @@ fitprofile summary --days 30 --imperial
 fitprofile csv weights.csv            # every raw column, UTC + local timestamps
 fitprofile json --imperial            # all measurements as JSON
 fitprofile export snapshot.json       # profiles, histories, devices, goals, settings
+fitprofile extras                     # unassigned readings, girths, heart-rate records (live, not stored)
 fitprofile profiles | devices
 ```
 
@@ -79,7 +80,7 @@ MIT. See [LICENSE](LICENSE).
 You should be able to verify these by reading `src/fitprofile/client.py` (about 250 lines):
 
 - Only the Fit Profile host is contacted. There is no telemetry, update check or other network access.
-- Only six read endpoints can be requested (`ALLOWED_READS`). The service has destructive operations that are plain GETs, so the client refuses any other path rather than trusting the HTTP method.
+- Only ten read endpoints can be requested (`ALLOWED_READS`). The service has destructive operations that are plain GETs, so the client refuses any other path rather than trusting the HTTP method.
 - It never calls endpoints that return third-party integration tokens, manage reports, or change the account.
 - Your password is RSA-encrypted with the service's public key before sending; the only secret stored locally is the bearer token, in a `0600` file.
 - Responses with an unexpected shape fail loudly instead of producing a partial export.

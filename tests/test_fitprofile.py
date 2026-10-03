@@ -192,6 +192,29 @@ class History(unittest.TestCase):
         self.assertEqual(t.measurement_queries()[0]["last_updated_at"], "0")  # partial store is never trusted
 
 
+class Extras(unittest.TestCase):
+    def test_paged_walks_to_finish_and_collects_deleted(self):
+        path = "/girths/list_girth"
+        def pg(rows, finish, lu, lg, deleted=()):
+            return ok({"girth_ary": rows, "deleted_girth_ids": list(deleted), "last_updated_at": lu,
+                       "last_girth_id": lg, "finish_flag": finish})
+        c, t = make({path: [pg([{"id": 1}], 0, 5, "1"), pg([{"id": 2}], 1, 6, "2", deleted=["9"])]})
+        c.login()
+        self.assertEqual(c.paged("girths", "7"), {"records": [{"id": 1}, {"id": 2}], "count": 2,
+                                                  "deleted_ids": ["9"]})
+
+    def test_paged_stall_and_bad_schema_fail(self):
+        path = "/girths/list_girth"
+        c, _ = make({path: [ok({"girth_ary": [], "last_updated_at": 0, "last_girth_id": "0", "finish_flag": 0})]})
+        c.login()
+        with self.assertRaisesRegex(fp.ApiError, "stalled"):
+            c.paged("girths", "7")
+        c, _ = make({path: [ok({"girth_ary": "x"})]})
+        c.login()
+        with self.assertRaisesRegex(fp.ApiError, "schema"):
+            c.paged("girths", "7")
+
+
 class Probe(unittest.TestCase):
     def test_probe_reports_shape(self):
         c, _ = make({"/measurements/list_measurement": [page([row(1, 1_700_000_100)], finish=1)]})

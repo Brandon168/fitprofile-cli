@@ -20,6 +20,10 @@ Some destructive operations (for example deleting or toggling a health report) a
 
 | Dataset | Path | Parameters |
 |---|---|---|
+| Unassigned readings | `/unknown_datas/list_unknown_data` | none (returns `unknown_datas`, `unknown_rope_records`, `unknown_blood_pressures`) |
+| Girths (tape/derived circumferences) | `/girths/list_girth` | `user_id`, `last_updated_at`, `last_girth_id` (same cursor/`finish_flag` scheme as measurements) |
+| Custom girth sites | `/girths/list_custom_girth` | `user_id` |
+| Standalone heart rate | `/heart_rate_records/list_heart_rate_record` | `user_id`, `last_updated_at`, `last_heart_rate_record_id` (cursor scheme as above) |
 | Primary profile | `/users/get_primary_user` | none (returns `user_info`) |
 | Sub-profiles | `/sub_users/list_sub_user` | none |
 | Measurements | `/measurements/list_measurement` | `user_id`, `last_updated_at`, `last_measurement_id` |
@@ -46,3 +50,5 @@ The API also exposes integration credentials (for example third-party fitness-se
 ## Record fields
 
 `time_stamp` is epoch seconds (UTC). `weight` is in kg. Records carry about 90 fields: `bodyfat`, `bmi`, `bmr`, `bodyage`, `muscle`, `sinew`, `water`, `bone`, `visfat`, `subfat`, `protein`, `score`, `heart_rate`, mass fields, and per-segment (arm, leg, trunk) fat, muscle and resistance values. Units of the segmental fields are not documented; do not assume them. Zero can mean "unavailable".
+
+Parameter names for the secondary datasets above were discovered by probing (the service answers `422 Missing Params: <name>`), and were verified live on an account with no data in them, so record shapes for girths and heart rates are unverified. Datasets that need a device `mac`, a `zone`, or other cursors (device users, scale users, weight predictions, body-fat calculations) are not read.

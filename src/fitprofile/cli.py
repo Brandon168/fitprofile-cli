@@ -79,6 +79,10 @@ def cmd_devices(args: argparse.Namespace) -> int:
     return emit({"devices": make_client(args).get("/device_binds/list_device_bind")})
 
 
+def cmd_extras(args: argparse.Namespace) -> int:
+    return emit({"extras": make_client(args).extras()})
+
+
 def read_rows(args: argparse.Namespace) -> tuple[list[dict], dict[str, Any]]:
     """Records for the logged-in profile plus provenance: synced, store, or stale_store."""
     path, meta, blob = Path(args.store), {}, None
@@ -151,6 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--full", action="store_true", help="discard the cursor and re-pull everything")
     add("export", cmd_export, "sync, then write the full snapshot as JSON").add_argument("path")
     add("profiles", cmd_profiles, "list the account's profiles")
+    add("extras", cmd_extras, "unassigned readings, girths and heart-rate records (live, not stored)")
     add("devices", cmd_devices, "list bound scales")
     for name, func, help in (("summary", cmd_summary, "recent weight and body-fat summary"),
                              ("json", cmd_json, "print measurements as JSON"),

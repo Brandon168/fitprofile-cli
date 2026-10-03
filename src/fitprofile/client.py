@@ -26,7 +26,15 @@ SUCCESS = {"200"}
 ALLOWED_READS = frozenset({
     "/users/get_primary_user", "/sub_users/list_sub_user", "/measurements/list_measurement",
     "/device_binds/list_device_bind", "/goals/list_goal", "/user_settings/show_common_setting",
+    "/unknown_datas/list_unknown_data", "/girths/list_girth", "/girths/list_custom_girth",
+    "/heart_rate_records/list_heart_rate_record",
 })
+# Cursor-paged secondary datasets: path -> (record key, deleted-ids key, id-cursor parameter)
+PAGED = {
+    "girths": ("/girths/list_girth", "girth_ary", "deleted_girth_ids", "last_girth_id"),
+    "heart_rates": ("/heart_rate_records/list_heart_rate_record", "heart_rate_records",
+                    "deleted_heart_rate_record_ids", "last_heart_rate_record_id"),
+}
 # Public RSA key the service uses to receive passwords at login. It is a public key
 # (not a secret) and is the same one other community clients for this service use.
 PUBLIC_KEY_PEM = b"""-----BEGIN PUBLIC KEY-----
@@ -190,6 +198,42 @@ class Client:
             if flag != "0":
                 raise ApiError("Unknown finish_flag; refusing a partial export")
         raise ApiError("Measurement page limit reached; refusing a partial export")
+
+    def paged(self, name: str, user_id: str) -> dict:
+        """Walk one secondary cursor-paged dataset (girths, heart_rates) to its end; never returns a partial list."""
+        path, rec_key, del_key, id_param = PAGED[name]
+        rows: list[Any] = []
+        deleted: set[str] = set()
+        cursor = ("0", "0")
+        seen: set[tuple] = set()
+        for _ in range(10001):
+            if cursor in seen:
+                raise ApiError(f"{name} pagination stalled; refusing a partial export")
+            seen.add(cursor)
+            data = self.get(path, user_id=user_id, last_updated_at=cursor[0], **{id_param: cursor[1]})
+            if not isinstance(data, dict) or not isinstance(data.get(rec_key), list):
+                raise ApiError(f"Unexpected {name} page schema")
+            rows.extend(data[rec_key])
+            deleted.update(str(x) for x in data.get(del_key) or [])
+            cursor = (str(data["last_updated_at"]), str(data[id_param]))
+            flag = str(data.get("finish_flag"))
+            if flag == "1":
+                return {"records": rows, "count": len(rows), "deleted_ids": sorted(deleted)}
+            if flag != "0":
+                raise ApiError(f"Unknown finish_flag in {name}; refusing a partial export")
+        raise ApiError(f"{name} page limit reached; refusing a partial export")
+
+    def extras(self) -> dict:
+        """Optional read-only datasets outside the weight history: unassigned readings, girths, heart rates."""
+        profiles = self.profiles()
+        out: dict[str, Any] = {"unassigned": self.get("/unknown_datas/list_unknown_data"), "profiles": {}}
+        for p in profiles:
+            uid = str(p["user_id"])
+            out["profiles"][uid] = {
+                "girths": self.paged("girths", uid),
+                "custom_girths": self.get("/girths/list_custom_girth", user_id=uid),
+                "heart_rates": self.paged("heart_rates", uid)}
+        return out
 
     def probe(self) -> dict:
         """Read-only health check: login, profiles, and one real measurement page validated for shape."""
