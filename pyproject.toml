@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fitprofile-cli"
+version = "0.1.0"
+description = "Unofficial, read-only exporter for Fit Profile scale data (GE CS10G and other QN-based smart scales)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["cryptography>=42"]
+keywords = ["smart scale", "body composition", "bioimpedance", "BIA", "export", "csv", "GE CS10G", "Fit Profile", "QN scale"]
+
+[project.scripts]
+fitprofile = "fitprofile.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fitprofile"]
