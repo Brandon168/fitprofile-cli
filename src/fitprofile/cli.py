@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import sys
@@ -83,6 +84,35 @@ def cmd_extras(args: argparse.Namespace) -> int:
     return emit({"extras": make_client(args).extras()})
 
 
+def _uid(client: Client, args: argparse.Namespace) -> str:
+    return args.user_id or str(client.login()["user_id"])
+
+
+def cmd_reports(args: argparse.Namespace) -> int:
+    client = make_client(args)
+    uid = _uid(client, args)
+    if args.action == "list":
+        return emit({"user_id": uid, **client.reports(uid)})
+    if not args.date:
+        raise UsageError(f"`reports {args.action}` needs a YYYY-MM-DD date")
+    try:
+        dt.date.fromisoformat(args.date)
+    except ValueError:
+        raise UsageError(f"Not a YYYY-MM-DD date: {args.date}") from None
+    M = "/measurement/api/v4/"
+    if args.action == "monthly":
+        data = client.get("/health_reports/show_health_report", user_id=uid, record_date=args.date)
+    elif args.action == "weekly":
+        data = client.get(M + "measurement_weeklies/show_measurement_weekly", user_id=uid, week_day=args.date)
+    elif args.action == "goal":
+        data = client.get(M + "ai_weight_goal_reports/show_report", user_id=uid, last_monday=args.date)
+    else:  # delete
+        if not args.yes:
+            raise UsageError("Deleting a report is irreversible and UNTESTED; pass --yes to proceed.")
+        data = client.delete_health_report(uid, args.date)
+    return emit({"user_id": uid, "action": args.action, "date": args.date, "data": data})
+
+
 def read_rows(args: argparse.Namespace) -> tuple[list[dict], dict[str, Any]]:
     """Records for the logged-in profile plus provenance: synced, store, or stale_store."""
     path, meta, blob = Path(args.store), {}, None
@@ -135,7 +165,8 @@ def cmd_csv(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="fitprofile", description="Unofficial, read-only Fit Profile exporter.")
+    ap = argparse.ArgumentParser(prog="fitprofile",
+                                 description="Unofficial Fit Profile client (report deletion is untested).")
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     ap.add_argument("--env-file", help="credentials file (default: ~/.config/fitprofile/credentials.env)")
     ap.add_argument("--store", default=str(paths.default_store()), help="local store path")
@@ -156,6 +187,12 @@ def build_parser() -> argparse.ArgumentParser:
     add("export", cmd_export, "sync, then write the full snapshot as JSON").add_argument("path")
     add("profiles", cmd_profiles, "list the account's profiles")
     add("extras", cmd_extras, "unassigned readings, girths and heart-rate records (live, not stored)")
+    rp = add("reports", cmd_reports, "list or show existing monthly/weekly reports (delete is UNTESTED)")
+    rp.add_argument("action", choices=["list", "monthly", "weekly", "goal", "delete"])
+    rp.add_argument("date", nargs="?", help="YYYY-MM-DD: month start (monthly, delete), any day of the week "
+                    "(weekly), or the week's Monday (goal)")
+    rp.add_argument("--user-id", help="profile ID (default: the logged-in profile)")
+    rp.add_argument("--yes", action="store_true", help="required for delete")
     add("devices", cmd_devices, "list bound scales")
     for name, func, help in (("summary", cmd_summary, "recent weight and body-fat summary"),
                              ("json", cmd_json, "print measurements as JSON"),

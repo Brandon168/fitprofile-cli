@@ -1,4 +1,4 @@
-"""Read-only client for the Fit Profile cloud API (unofficial; see docs/protocol.md)."""
+"""Client for the Fit Profile cloud API (unofficial; see docs/protocol.md)."""
 from __future__ import annotations
 
 import base64
@@ -17,9 +17,12 @@ from . import __version__
 from .paths import write_private
 from .report import sort_key
 
-API_BASE = "https://fit-profile.qnclouds.com/api/v4"
+HOST = "https://fit-profile.qnclouds.com"
+API_BASE = f"{HOST}/api/v4"
+# Some services live under their own prefix on the same host, relative to HOST not API_BASE.
+HOST_PREFIXES = ("/measurement/api/v4/",)
 APP_ID = "fit_profile"
-USER_AGENT = f"fitprofile-cli/{__version__} (unofficial; read-only)"
+USER_AGENT = f"fitprofile-cli/{__version__} (unofficial)"
 SUCCESS = {"200"}
 # The service has destructive operations that are plain GETs (for example deleting a health
 # report), so a method restriction is not enough. Only these reads can be requested.
@@ -28,7 +31,15 @@ ALLOWED_READS = frozenset({
     "/device_binds/list_device_bind", "/goals/list_goal", "/user_settings/show_common_setting",
     "/unknown_datas/list_unknown_data", "/girths/list_girth", "/girths/list_custom_girth",
     "/heart_rate_records/list_heart_rate_record",
+    "/health_reports/list_health_report", "/health_reports/show_health_report",
+    "/measurement/api/v4/measurement_weeklies/list_measurement_weekly",
+    "/measurement/api/v4/measurement_weeklies/show_measurement_weekly",
+    "/measurement/api/v4/ai_weight_goal_reports/show_report",
+    "/measurement/api/v4/check_data/check_weekly_report_exists",
 })
+# State-changing calls. These are plain GETs on the service, so they get their own allowlist and
+# can only be reached through the explicit methods below. UNTESTED against the live service.
+ALLOWED_WRITES = frozenset({"/health_reports/delete_health_report"})
 # Cursor-paged secondary datasets: path -> (record key, deleted-ids key, id-cursor parameter)
 PAGED = {
     "girths": ("/girths/list_girth", "girth_ary", "deleted_girth_ids", "last_girth_id"),
@@ -88,7 +99,8 @@ class Client:
         if body is not None:
             headers["Content-Type"] = "application/json;charset=UTF-8"
             data = json.dumps(body).encode()
-        req = urllib.request.Request(f"{API_BASE}{path}?{urllib.parse.urlencode(query)}", data=data,
+        base = HOST if path.startswith(HOST_PREFIXES) else API_BASE
+        req = urllib.request.Request(f"{base}{path}?{urllib.parse.urlencode(query)}", data=data,
                                      headers=headers, method="POST" if body is not None else "GET")
         for attempt in range(3):
             try:
@@ -151,6 +163,9 @@ class Client:
     def get(self, path: str, **params: str) -> Any:
         if path not in ALLOWED_READS:
             raise ApiError(f"{path} is not an allowed read endpoint")
+        return self._authed(path, **params)
+
+    def _authed(self, path: str, **params: str) -> Any:
         if not self.token:
             self.login()
         try:
@@ -199,6 +214,12 @@ class Client:
                 raise ApiError("Unknown finish_flag; refusing a partial export")
         raise ApiError("Measurement page limit reached; refusing a partial export")
 
+    def delete_health_report(self, user_id: str, record_date: str) -> Any:
+        """Delete one monthly health report. UNTESTED live: parameters are inferred from the read endpoints."""
+        path = "/health_reports/delete_health_report"
+        assert path in ALLOWED_WRITES
+        return self._authed(path, user_id=user_id, record_date=record_date)
+
     def paged(self, name: str, user_id: str) -> dict:
         """Walk one secondary cursor-paged dataset (girths, heart_rates) to its end; never returns a partial list."""
         path, rec_key, del_key, id_param = PAGED[name]
@@ -234,6 +255,15 @@ class Client:
                 "custom_girths": self.get("/girths/list_custom_girth", user_id=uid),
                 "heart_rates": self.paged("heart_rates", uid)}
         return out
+
+    def reports(self, user_id: str, *, today: dt.date | None = None) -> dict:
+        """Existing monthly and weekly report indexes for one profile (reads only; nothing is generated)."""
+        day = (today or dt.date.today()).replace(day=1).isoformat()
+        # Observed: the monthly index ignores record_date and lists the latest month, so one call suffices.
+        monthly = self.get("/health_reports/list_health_report", user_id=user_id, record_date=day)
+        weekly = self.get("/measurement/api/v4/measurement_weeklies/list_measurement_weekly",
+                          user_id=user_id, limit="50", page="1")
+        return {"monthly": monthly, "weekly": weekly}
 
     def probe(self) -> dict:
         """Read-only health check: login, profiles, and one real measurement page validated for shape."""

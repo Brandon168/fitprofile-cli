@@ -1,8 +1,8 @@
 # fitprofile-cli
 
-Unofficial, read-only command-line exporter for **Fit Profile** smart-scale data: weight, body fat, muscle, water, bone, BMR and the other bioimpedance (BIA) estimates your scale uploads. Tested with the **GE CS10G** scale and the Fit Profile Android app (v1.34.0, US region). Other QN-based scales that sync to the Fit Profile app may work; none are verified.
+Unofficial command-line exporter for **Fit Profile** smart-scale data: weight, body fat, muscle, water, bone, BMR and the other bioimpedance (BIA) estimates your scale uploads. Tested with the **GE CS10G** scale and the Fit Profile Android app (v1.34.0, US region). Other QN-based scales that sync to the Fit Profile app may work; none are verified.
 
-> **Not affiliated with, endorsed by, or supported by GE, Qingniu (QN), or the Fit Profile app.** All names are used only to describe compatibility. This talks to an undocumented service and can break without notice. It only reads data from your own account; it never writes, deletes, registers, or resets anything. Use at your own risk and check the service's terms for your situation.
+> **Not affiliated with, endorsed by, or supported by GE, Qingniu (QN), or the Fit Profile app.** All names are used only to describe compatibility. This talks to an undocumented service and can break without notice. It reads data from your own account. The one state-changing command, `fitprofile reports delete`, is **untested against the live service** (its parameters are inferred) and needs `--yes`; everything else is read-only. Use at your own risk and check the service's terms for your situation.
 
 ## Install
 
@@ -39,6 +39,8 @@ fitprofile summary --days 30 --imperial
 fitprofile csv weights.csv            # every raw column, UTC + local timestamps
 fitprofile json --imperial            # all measurements as JSON
 fitprofile export snapshot.json       # profiles, histories, devices, goals, settings
+fitprofile reports list                # existing monthly/weekly reports (nothing is generated)
+fitprofile reports weekly 2026-09-28  # also: monthly YYYY-MM-01, goal <Monday>; delete YYYY-MM-01 --yes (UNTESTED)
 fitprofile extras                     # unassigned readings, girths, heart-rate records (live, not stored)
 fitprofile profiles | devices
 ```
@@ -80,8 +82,9 @@ MIT. See [LICENSE](LICENSE).
 You should be able to verify these by reading `src/fitprofile/client.py` (about 250 lines):
 
 - Only the Fit Profile host is contacted. There is no telemetry, update check or other network access.
-- Only ten read endpoints can be requested (`ALLOWED_READS`). The service has destructive operations that are plain GETs, so the client refuses any other path rather than trusting the HTTP method.
-- It never calls endpoints that return third-party integration tokens, manage reports, or change the account.
+- Only a fixed list of read endpoints can be requested (`ALLOWED_READS`). The service has destructive operations that are plain GETs, so the client refuses any other path rather than trusting the HTTP method.
+- The single write, deleting a monthly health report, has its own allowlist (`ALLOWED_WRITES`), is reachable only through `reports delete --yes`, and has never been run against the live service.
+- It never calls endpoints that return third-party integration tokens, toggle report push notifications, generate reports, or change the account otherwise.
 - Your password is RSA-encrypted with the service's public key before sending; the only secret stored locally is the bearer token, in a `0600` file.
 - Responses with an unexpected shape fail loudly instead of producing a partial export.
 

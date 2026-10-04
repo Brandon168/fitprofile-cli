@@ -52,6 +52,14 @@ class FakeTransport:
     def query(self, i=-1):
         return dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(self.requests[i].full_url).query))
 
+    @property
+    def urls(self):
+        return [r.full_url for r in self.requests]
+
+    def queries(self, path):
+        return [dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(r.full_url).query))
+                for r in self.requests if urllib.parse.urlsplit(r.full_url).path.endswith(path)]
+
     def measurement_queries(self):
         return [self.query(i) for i, r in enumerate(self.requests) if "list_measurement" in r.full_url]
 
@@ -192,6 +200,35 @@ class History(unittest.TestCase):
         self.assertEqual(t.measurement_queries()[0]["last_updated_at"], "0")  # partial store is never trusted
 
 
+class Reports(unittest.TestCase):
+    W = "/measurement/api/v4/measurement_weeklies/list_measurement_weekly"
+    H = "/health_reports/list_health_report"
+
+    def test_reports_index_calls(self):
+        import datetime
+        c, t = make({self.H: [ok({"health_reports": [{"record_date": "2026-09-01", "present_flag": 0}]})],
+                     self.W: [ok({"week_days": [], "free_trial_week_days": []})]})
+        out = c.reports("7", today=datetime.date(2026, 10, 3))
+        self.assertEqual([q["record_date"] for q in t.queries(self.H)], ["2026-10-01"])
+        self.assertEqual(out["weekly"], {"week_days": [], "free_trial_week_days": []})
+        self.assertEqual(out["monthly"]["health_reports"][0]["present_flag"], 0)
+
+    def test_prefixed_path_goes_to_host_root(self):
+        c, t = make({self.W: [ok({"week_days": []})]})
+        c.login()
+        c.get(self.W, user_id="7", limit="1", page="1")
+        self.assertTrue(t.urls[-1].startswith("https://fit-profile.qnclouds.com/measurement/api/v4/"))
+
+    def test_delete_uses_write_allowlist_and_get_cannot_delete(self):
+        dp = "/health_reports/delete_health_report"
+        c, t = make({dp: [ok({})]})
+        c.login()
+        with self.assertRaisesRegex(fp.ApiError, "not an allowed read"):
+            c.get(dp, user_id="7", record_date="2026-09-01")
+        c.delete_health_report("7", "2026-09-01")
+        self.assertIn(dp, t.urls[-1])
+
+
 class Extras(unittest.TestCase):
     def test_paged_walks_to_finish_and_collects_deleted(self):
         path = "/girths/list_girth"
@@ -231,6 +268,19 @@ class Probe(unittest.TestCase):
         c, _ = make({"/measurements/list_measurement": [ok({"measurements": []})]})
         with self.assertRaisesRegex(fp.ApiError, "schema changed"):
             c.history("7")
+
+
+class CliReports(unittest.TestCase):
+    def test_delete_refused_without_yes_and_bad_date_rejected(self):
+        c, t = make()
+        cases = ((["reports", "delete", "2026-09-01"], "--yes"), (["reports", "monthly", "nope"], "YYYY-MM-DD"))
+        for argv, text in cases:
+            out = io.StringIO()
+            with mock.patch.object(cli, "make_client", return_value=c), contextlib.redirect_stdout(out):
+                code = cli.main(argv)
+            self.assertEqual(code, 2)
+            self.assertIn(text, out.getvalue())
+        self.assertFalse(any("delete_health_report" in u for u in t.urls))
 
 
 class AccountScope(unittest.TestCase):

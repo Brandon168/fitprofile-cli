@@ -16,7 +16,7 @@ Observed behaviour of the Fit Profile cloud service, informed by static review o
 
 ## Read endpoints (all GET)
 
-Some destructive operations (for example deleting or toggling a health report) are also plain GETs, so the client allowlists exactly the paths below instead of trusting the HTTP method.
+Some destructive operations (deleting or toggling a health report) are also plain GETs, so the client allowlists exactly the paths below instead of trusting the HTTP method. `/measurement/api/v4/...` paths are relative to the host root rather than `/api/v4`.
 
 | Dataset | Path | Parameters |
 |---|---|---|
@@ -24,6 +24,11 @@ Some destructive operations (for example deleting or toggling a health report) a
 | Girths (tape/derived circumferences) | `/girths/list_girth` | `user_id`, `last_updated_at`, `last_girth_id` (same cursor/`finish_flag` scheme as measurements) |
 | Custom girth sites | `/girths/list_custom_girth` | `user_id` |
 | Standalone heart rate | `/heart_rate_records/list_heart_rate_record` | `user_id`, `last_updated_at`, `last_heart_rate_record_id` (cursor scheme as above) |
+| Monthly report availability | `/health_reports/list_health_report` | `user_id`, `record_date` (`YYYY-MM-DD`, month start; returns `present_flag`; `YYYY-MM` gives a 500). Observed on an account with no reports: it returns the previous month whatever date is sent |
+| Monthly report | `/health_reports/show_health_report` | same; returns code `50000 Error Data` when no report exists |
+| Weekly reports index | `/measurement/api/v4/measurement_weeklies/list_measurement_weekly` | `user_id`, `limit`, `page` (1-based; page 0 gives a 500) |
+| Weekly report | `/measurement/api/v4/measurement_weeklies/show_measurement_weekly` | `user_id`, `week_day` (`YYYY-MM-DD`); daily series plus the week's last full measurement |
+| Weight-goal report | `/measurement/api/v4/ai_weight_goal_reports/show_report` | `user_id`, `last_monday` |
 | Primary profile | `/users/get_primary_user` | none (returns `user_info`) |
 | Sub-profiles | `/sub_users/list_sub_user` | none |
 | Measurements | `/measurements/list_measurement` | `user_id`, `last_updated_at`, `last_measurement_id` |
@@ -43,9 +48,13 @@ Start at `last_updated_at=0&last_measurement_id=0`. Each page returns `measureme
 - Resuming from a stored cursor was observed to re-send the boundary record, so merge by union, not append.
 - Cursors belong to one account; never resume them under another login. Tombstones (`delete_measurement_ids`) are accumulated permanently, which assumes the server never reuses an ID.
 
-## Deliberately not read
+## Write: delete a monthly report (untested)
 
-The API also exposes integration credentials (for example third-party fitness-service tokens), health-report management and account-changing endpoints. This client never calls them.
+`GET /health_reports/delete_health_report` is exposed as `fitprofile reports delete YYYY-MM-DD --yes`. Its parameters (`user_id`, `record_date`) are inferred from the matching read endpoints and it has **never been run against the live service**. `control_health_report_push` (a push-notification toggle) is not implemented: its parameters are unknown and it has little value for an exporter. Report generation endpoints (`generate_*`) are POSTs that persist state and are never called.
+
+## Deliberately not called
+
+The API also exposes integration credentials (for example third-party fitness-service tokens), report generation and account-changing endpoints. This client never calls them.
 
 ## Record fields
 
