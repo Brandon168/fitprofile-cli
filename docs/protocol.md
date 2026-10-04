@@ -33,6 +33,8 @@ Some destructive operations (deleting or toggling a health report) are also plai
 | Weight prediction | `/weight_predicts/list_weight_predict` | `user_id`, `zone` (IANA name; returns `history_weights`, `predict_weights`, `predict_days`, `weight_goal`) |
 | Device users | `/device_users/list_device_user` | `mac` (from the device list) |
 | Scale user slots | `/scale_users/list_scale_user` | `mac` |
+| AI analysis existence | `/measurement/api/v4/check_data/check_measurement_analyze_exists` | `user_id`, `measurement_ids` (single ID tested); returns `ai_measure_reports` |
+| AI analysis | `/measurement/api/v4/ai_measurement_analysis/show_analysis` | `user_id`, `ai_measure_report_id` (from the check above) |
 | Primary profile | `/users/get_primary_user` | none (returns `user_info`) |
 | Sub-profiles | `/sub_users/list_sub_user` | none |
 | Measurements | `/measurements/list_measurement` | `user_id`, `last_updated_at`, `last_measurement_id` |
@@ -68,4 +70,4 @@ Parameter names for the secondary datasets above were discovered by probing (the
 
 ## Known gaps
 
-Not implemented, deliberately: AI measurement analysis (`ai_measurement_analysis/show_analysis` needs an `ai_measure_repo` value that was not established), report generation, report push toggle, friends/sharing, food/sport/step/water/blood-pressure data, and anything that returns integration credentials. Record shapes for girths, heart rates, body-fat calculations, and monthly/goal reports are unverified because those datasets are empty on the test account.
+Not implemented, deliberately: report generation, report push toggle, friends/sharing, food/sport/step/water/blood-pressure data, and anything that returns integration credentials. Record shapes for girths, heart rates, body-fat calculations, and monthly/goal reports and AI analyses are unverified because those datasets are empty on the test account.

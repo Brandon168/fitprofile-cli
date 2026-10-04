@@ -41,6 +41,7 @@ fitprofile json --imperial            # all measurements as JSON
 fitprofile export snapshot.json       # profiles, histories, devices, goals, settings
 fitprofile reports list                # existing monthly/weekly reports (nothing is generated)
 fitprofile reports weekly 2026-09-28  # also: monthly YYYY-MM-01, goal <Monday>; delete YYYY-MM-01 --yes (UNTESTED)
+fitprofile reports analysis --limit 20 # existing AI analyses for your latest weigh-ins (none are generated)
 fitprofile extras                     # unassigned readings, girths, heart rate, body-fat calcs, weight prediction, scale user slots (live, not stored)
 fitprofile profiles | devices
 ```

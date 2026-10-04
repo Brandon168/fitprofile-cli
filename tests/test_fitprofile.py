@@ -279,6 +279,19 @@ class ExtrasAll(unittest.TestCase):
         self.assertEqual(t.queries("list_weight_predict")[0]["zone"], "America/Chicago")
 
 
+class Analyses(unittest.TestCase):
+    M = "/measurement/api/v4/"
+
+    def test_analyses_check_then_show_each_report(self):
+        c, t = make({self.M + "check_data/check_measurement_analyze_exists": [
+                         ok({"ai_measure_reports": [{"ai_measure_report_id": "r1"}]}), ok({"ai_measure_reports": []})],
+                     self.M + "ai_measurement_analysis/show_analysis": [ok({"text": "x"})]})
+        out = c.analyses("7", ["1", "2"])
+        self.assertEqual([o["measurement_id"] for o in out], ["1"])
+        self.assertEqual(t.queries("show_analysis")[0]["ai_measure_report_id"], "r1")
+        self.assertEqual(out[0]["analysis"], {"text": "x"})
+
+
 class Probe(unittest.TestCase):
     def test_probe_reports_shape(self):
         c, _ = make({"/measurements/list_measurement": [page([row(1, 1_700_000_100)], finish=1)]})

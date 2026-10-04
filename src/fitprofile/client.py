@@ -37,6 +37,8 @@ ALLOWED_READS = frozenset({
     "/measurement/api/v4/measurement_weeklies/show_measurement_weekly",
     "/measurement/api/v4/ai_weight_goal_reports/show_report",
     "/measurement/api/v4/check_data/check_weekly_report_exists",
+    "/measurement/api/v4/check_data/check_measurement_analyze_exists",
+    "/measurement/api/v4/ai_measurement_analysis/show_analysis",
 })
 # State-changing calls. These are plain GETs on the service, so they get their own allowlist and
 # can only be reached through the explicit methods below. UNTESTED against the live service.
@@ -268,6 +270,24 @@ class Client:
                 "heart_rates": self.paged("heart_rates", uid),
                 "bodyfat_calculations": self.paged("bodyfat_calculations", uid),
                 "weight_predict": self.get("/weight_predicts/list_weight_predict", user_id=uid, zone=zone)}
+        return out
+
+    def analyses(self, user_id: str, measurement_ids: list[str]) -> list[dict]:
+        """Existing AI analyses for given measurements (one lookup per ID; nothing is generated).
+
+        The existence check returns report IDs; `show_analysis` fetches each. Only the single-ID form of
+        the check was exercised live, and on an account with no analyses, so the result shape is unverified."""
+        M = "/measurement/api/v4/"
+        out = []
+        for mid in measurement_ids:
+            found = self.get(M + "check_data/check_measurement_analyze_exists",
+                             user_id=user_id, measurement_ids=str(mid))
+            for ref in (found.get("ai_measure_reports") or []) if isinstance(found, dict) else []:
+                rid = ref.get("ai_measure_report_id") if isinstance(ref, dict) else ref
+                if rid:
+                    out.append({"measurement_id": str(mid), "reference": ref, "analysis": self.get(
+                        M + "ai_measurement_analysis/show_analysis", user_id=user_id,
+                        ai_measure_report_id=str(rid))})
         return out
 
     def reports(self, user_id: str, *, today: dt.date | None = None) -> dict:

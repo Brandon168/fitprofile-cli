@@ -91,6 +91,10 @@ def _uid(client: Client, args: argparse.Namespace) -> str:
 def cmd_reports(args: argparse.Namespace) -> int:
     client = make_client(args)
     uid = _uid(client, args)
+    if args.action == "analysis":
+        records, _ = read_rows(args)
+        ids = [str(r["measurement_id"]) for r in records[-args.limit:]]
+        return emit({"user_id": uid, "checked": len(ids), "analyses": client.analyses(uid, ids)})
     if args.action == "list":
         return emit({"user_id": uid, **client.reports(uid)})
     if not args.date:
@@ -188,10 +192,13 @@ def build_parser() -> argparse.ArgumentParser:
     add("profiles", cmd_profiles, "list the account's profiles")
     add("extras", cmd_extras, "unassigned readings, girths and heart-rate records (live, not stored)")
     rp = add("reports", cmd_reports, "list or show existing monthly/weekly reports (delete is UNTESTED)")
-    rp.add_argument("action", choices=["list", "monthly", "weekly", "goal", "delete"])
+    rp.add_argument("action", choices=["list", "monthly", "weekly", "goal", "analysis", "delete"])
     rp.add_argument("date", nargs="?", help="YYYY-MM-DD: month start (monthly, delete), any day of the week "
                     "(weekly), or the week's Monday (goal)")
     rp.add_argument("--user-id", help="profile ID (default: the logged-in profile)")
+    rp.add_argument("--limit", type=int, default=20, help="analysis: check the latest N measurements")
+    rp.add_argument("--no-sync", action="store_true", help="analysis: use the local store without syncing")
+    rp.set_defaults(imperial=False)
     rp.add_argument("--yes", action="store_true", help="required for delete")
     add("devices", cmd_devices, "list bound scales")
     for name, func, help in (("summary", cmd_summary, "recent weight and body-fat summary"),
