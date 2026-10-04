@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fitprofile-cli"
-version = "0.4.0"
+version = "0.5.0"
 description = "Unofficial exporter for Fit Profile scale data (GE CS10G and other QN-based smart scales)"
 readme = "README.md"
 license = { text = "MIT" }

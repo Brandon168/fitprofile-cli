@@ -81,7 +81,7 @@ def cmd_devices(args: argparse.Namespace) -> int:
 
 
 def cmd_extras(args: argparse.Namespace) -> int:
-    return emit({"extras": make_client(args).extras()})
+    return emit({"extras": make_client(args).extras(zone=args.tz or "UTC")})
 
 
 def _uid(client: Client, args: argparse.Namespace) -> str:

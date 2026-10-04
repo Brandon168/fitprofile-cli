@@ -30,7 +30,8 @@ ALLOWED_READS = frozenset({
     "/users/get_primary_user", "/sub_users/list_sub_user", "/measurements/list_measurement",
     "/device_binds/list_device_bind", "/goals/list_goal", "/user_settings/show_common_setting",
     "/unknown_datas/list_unknown_data", "/girths/list_girth", "/girths/list_custom_girth",
-    "/heart_rate_records/list_heart_rate_record",
+    "/heart_rate_records/list_heart_rate_record", "/bodyfat_calculations/list_bodyfat_calculation",
+    "/device_users/list_device_user", "/scale_users/list_scale_user", "/weight_predicts/list_weight_predict",
     "/health_reports/list_health_report", "/health_reports/show_health_report",
     "/measurement/api/v4/measurement_weeklies/list_measurement_weekly",
     "/measurement/api/v4/measurement_weeklies/show_measurement_weekly",
@@ -45,6 +46,8 @@ PAGED = {
     "girths": ("/girths/list_girth", "girth_ary", "deleted_girth_ids", "last_girth_id"),
     "heart_rates": ("/heart_rate_records/list_heart_rate_record", "heart_rate_records",
                     "deleted_heart_rate_record_ids", "last_heart_rate_record_id"),
+    "bodyfat_calculations": ("/bodyfat_calculations/list_bodyfat_calculation", "bodyfat_calculations",
+                             "deleted_bodyfat_calculation_ids", "last_bodyfat_calculation_id"),
 }
 # Public RSA key the service uses to receive passwords at login. It is a public key
 # (not a secret) and is the same one other community clients for this service use.
@@ -244,16 +247,27 @@ class Client:
                 raise ApiError(f"Unknown finish_flag in {name}; refusing a partial export")
         raise ApiError(f"{name} page limit reached; refusing a partial export")
 
-    def extras(self) -> dict:
-        """Optional read-only datasets outside the weight history: unassigned readings, girths, heart rates."""
+    def extras(self, zone: str = "UTC") -> dict:
+        """Optional read-only datasets outside the weight history (unassigned readings, girths, heart rates,
+        body-fat calculations, weight prediction, and the user slots on each bound scale)."""
         profiles = self.profiles()
-        out: dict[str, Any] = {"unassigned": self.get("/unknown_datas/list_unknown_data"), "profiles": {}}
+        binds = self.get("/device_binds/list_device_bind")
+        binds = binds.get("device_binds") if isinstance(binds, dict) else None
+        out: dict[str, Any] = {"unassigned": self.get("/unknown_datas/list_unknown_data"), "profiles": {},
+                               "devices": {}}
+        for b in binds or []:
+            mac = b.get("mac")
+            if mac:
+                out["devices"][mac] = {"device_users": self.get("/device_users/list_device_user", mac=mac),
+                                       "scale_users": self.get("/scale_users/list_scale_user", mac=mac)}
         for p in profiles:
             uid = str(p["user_id"])
             out["profiles"][uid] = {
                 "girths": self.paged("girths", uid),
                 "custom_girths": self.get("/girths/list_custom_girth", user_id=uid),
-                "heart_rates": self.paged("heart_rates", uid)}
+                "heart_rates": self.paged("heart_rates", uid),
+                "bodyfat_calculations": self.paged("bodyfat_calculations", uid),
+                "weight_predict": self.get("/weight_predicts/list_weight_predict", user_id=uid, zone=zone)}
         return out
 
     def reports(self, user_id: str, *, today: dt.date | None = None) -> dict:

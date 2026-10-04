@@ -252,6 +252,33 @@ class Extras(unittest.TestCase):
             c.paged("girths", "7")
 
 
+class ExtrasAll(unittest.TestCase):
+    def test_extras_collects_every_dataset_per_profile_and_device(self):
+        def pg(key, delkey, idkey):
+            return ok({key: [], delkey: [], "last_updated_at": 1, idkey: "0", "finish_flag": 1})
+        routes = {
+            "/unknown_datas/list_unknown_data": [ok({"unknown_datas": []})],
+            "/device_binds/list_device_bind": [ok({"device_binds": [{"mac": "AA:BB"}, {"name": "no mac"}]})],
+            "/device_users/list_device_user": [ok({"device_users": []})],
+            "/scale_users/list_scale_user": [ok({"scale_users": [1, 2]})],
+            "/girths/list_girth": [pg("girth_ary", "deleted_girth_ids", "last_girth_id")],
+            "/girths/list_custom_girth": [ok({"custom_girths": []})],
+            "/heart_rate_records/list_heart_rate_record": [
+                pg("heart_rate_records", "deleted_heart_rate_record_ids", "last_heart_rate_record_id")],
+            "/bodyfat_calculations/list_bodyfat_calculation": [
+                pg("bodyfat_calculations", "deleted_bodyfat_calculation_ids", "last_bodyfat_calculation_id")],
+            "/weight_predicts/list_weight_predict": [ok({"predict_days": 3})],
+        }
+        c, t = make(routes)
+        out = c.extras(zone="America/Chicago")
+        self.assertEqual(list(out["devices"]), ["AA:BB"])
+        self.assertEqual(out["devices"]["AA:BB"]["scale_users"], {"scale_users": [1, 2]})
+        prof = out["profiles"]["7"]
+        self.assertEqual(set(prof), {"girths", "custom_girths", "heart_rates", "bodyfat_calculations",
+                                     "weight_predict"})
+        self.assertEqual(t.queries("list_weight_predict")[0]["zone"], "America/Chicago")
+
+
 class Probe(unittest.TestCase):
     def test_probe_reports_shape(self):
         c, _ = make({"/measurements/list_measurement": [page([row(1, 1_700_000_100)], finish=1)]})

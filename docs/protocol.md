@@ -29,6 +29,10 @@ Some destructive operations (deleting or toggling a health report) are also plai
 | Weekly reports index | `/measurement/api/v4/measurement_weeklies/list_measurement_weekly` | `user_id`, `limit`, `page` (1-based; page 0 gives a 500) |
 | Weekly report | `/measurement/api/v4/measurement_weeklies/show_measurement_weekly` | `user_id`, `week_day` (`YYYY-MM-DD`); daily series plus the week's last full measurement |
 | Weight-goal report | `/measurement/api/v4/ai_weight_goal_reports/show_report` | `user_id`, `last_monday` |
+| Body-fat calculations | `/bodyfat_calculations/list_bodyfat_calculation` | `user_id`, `last_updated_at`, `last_bodyfat_calculation_id` (cursor scheme as measurements) |
+| Weight prediction | `/weight_predicts/list_weight_predict` | `user_id`, `zone` (IANA name; returns `history_weights`, `predict_weights`, `predict_days`, `weight_goal`) |
+| Device users | `/device_users/list_device_user` | `mac` (from the device list) |
+| Scale user slots | `/scale_users/list_scale_user` | `mac` |
 | Primary profile | `/users/get_primary_user` | none (returns `user_info`) |
 | Sub-profiles | `/sub_users/list_sub_user` | none |
 | Measurements | `/measurements/list_measurement` | `user_id`, `last_updated_at`, `last_measurement_id` |
@@ -60,4 +64,8 @@ The API also exposes integration credentials (for example third-party fitness-se
 
 `time_stamp` is epoch seconds (UTC). `weight` is in kg. Records carry about 90 fields: `bodyfat`, `bmi`, `bmr`, `bodyage`, `muscle`, `sinew`, `water`, `bone`, `visfat`, `subfat`, `protein`, `score`, `heart_rate`, mass fields, and per-segment (arm, leg, trunk) fat, muscle and resistance values. Units of the segmental fields are not documented; do not assume them. Zero can mean "unavailable".
 
-Parameter names for the secondary datasets above were discovered by probing (the service answers `422 Missing Params: <name>`), and were verified live on an account with no data in them, so record shapes for girths and heart rates are unverified. Datasets that need a device `mac`, a `zone`, or other cursors (device users, scale users, weight predictions, body-fat calculations) are not read.
+Parameter names for the secondary datasets above were discovered by probing (the service answers `422 Missing Params: <name>`), and were verified live on an account with no data in them, so record shapes for girths and heart rates are unverified. Device users, scale users, weight prediction and body-fat calculations were probed live: weight prediction and scale users returned data, the others were empty on this account.
+
+## Known gaps
+
+Not implemented, deliberately: AI measurement analysis (`ai_measurement_analysis/show_analysis` needs an `ai_measure_repo` value that was not established), report generation, report push toggle, friends/sharing, food/sport/step/water/blood-pressure data, and anything that returns integration credentials. Record shapes for girths, heart rates, body-fat calculations, and monthly/goal reports are unverified because those datasets are empty on the test account.
